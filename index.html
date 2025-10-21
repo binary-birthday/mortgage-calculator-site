@@ -74,6 +74,10 @@
                     <input type="number" id="downPayment" value="20" min="5" max="50" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                 </div>
                 <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Credit Score</label>
+                    <input type="number" id="creditScore" value="760" min="580" max="850" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                </div>
+                <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-2">Annual Property Tax</label>
                     <input type="number" id="propertyTax" value="12000" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
                 </div>
@@ -115,6 +119,8 @@
                                 <th class="text-left py-3 px-2">Points</th>
                                 <th class="text-right py-3 px-2">Max Home Price</th>
                                 <th class="text-right py-3 px-2">Loan Amount</th>
+                                <th class="text-right py-3 px-2">LTV</th>
+                                <th class="text-right py-3 px-2">LLPA Fee</th>
                                 <th class="text-right py-3 px-2">Monthly P&I</th>
                                 <th class="text-right py-3 px-2">Total Monthly</th>
                                 <th class="text-right py-3 px-2">Cash Needed</th>
@@ -153,6 +159,43 @@
             { name: 'Portsmouth', medianPrice: 750000 },
             { name: 'Newmarket', medianPrice: 550000 }
         ];
+
+        // Fannie Mae LLPA Matrix (2024) - Loan Level Pricing Adjustments as % of loan amount
+        const llpaMatrix = {
+            // Credit Score ranges: [680-699, 700-719, 720-739, 740-759, 760-779, 780+]
+            // LTV ranges: [60-70, 70.01-75, 75.01-80, 80.01-85, 85.01-90, 90.01-95, 95.01-97]
+            680: [0.500, 0.750, 1.000, 1.750, 2.000, 2.250, 3.000],
+            700: [0.250, 0.500, 0.750, 1.500, 1.750, 2.000, 2.750],
+            720: [0.000, 0.250, 0.500, 1.250, 1.500, 1.750, 2.500],
+            740: [0.000, 0.250, 0.500, 1.000, 1.250, 1.500, 2.250],
+            760: [0.000, 0.250, 0.500, 1.000, 1.250, 1.500, 2.250],
+            780: [0.000, 0.250, 0.500, 1.000, 1.250, 1.500, 2.250]
+        };
+
+        function getCreditScoreTier(score) {
+            if (score >= 780) return 780;
+            if (score >= 760) return 760;
+            if (score >= 740) return 740;
+            if (score >= 720) return 720;
+            if (score >= 700) return 700;
+            return 680; // 680-699 (or below)
+        }
+
+        function getLTVTier(ltv) {
+            if (ltv <= 70) return 0;
+            if (ltv <= 75) return 1;
+            if (ltv <= 80) return 2;
+            if (ltv <= 85) return 3;
+            if (ltv <= 90) return 4;
+            if (ltv <= 95) return 5;
+            return 6; // 95.01-97
+        }
+
+        function getLLPA(creditScore, ltv) {
+            const creditTier = getCreditScoreTier(creditScore);
+            const ltvTier = getLTVTier(ltv);
+            return llpaMatrix[creditTier][ltvTier] / 100; // Convert to decimal
+        }
 
         function formatCurrency(num) {
             return new Intl.NumberFormat('en-US', {
@@ -196,14 +239,16 @@
                     const mid = (low + high) / 2;
                     const testDownPayment = mid * (inputs.downPayment / 100);
                     const testLoanAmount = mid - testDownPayment;
+                    const testLTV = (testLoanAmount / mid) * 100;
                     const testPointsCost = testLoanAmount * (points / 100);
+                    const testLLPA = getLLPA(inputs.creditScore, testLTV) * testLoanAmount;
                     
                     const buyingTransferTax = mid * 0.015;
                     const buyingClosingFees = mid * 0.02;
                     const buyingAppraisalGap = mid * (inputs.appraisalGap / 100);
                     const totalBuyingCosts = buyingTransferTax + buyingClosingFees + buyingAppraisalGap;
                     
-                    const testCashNeeded = testDownPayment + testPointsCost + totalBuyingCosts;
+                    const testCashNeeded = testDownPayment + testPointsCost + testLLPA + totalBuyingCosts;
                     const testPayment = calculateMonthlyPayment(testLoanAmount, adjustedRate);
                     
                     if (testPayment <= availableForPI && testCashNeeded <= totalCashAvailable) {
@@ -217,14 +262,16 @@
                 if (!bestResult || maxHomePrice > bestResult.maxHomePrice) {
                     const actualDownPayment = maxHomePrice * (inputs.downPayment / 100);
                     const loanAmount = maxHomePrice - actualDownPayment;
+                    const actualLTV = (loanAmount / maxHomePrice) * 100;
                     const pointsCost = loanAmount * (points / 100);
+                    const llpaFee = getLLPA(inputs.creditScore, actualLTV) * loanAmount;
                     
                     const buyingTransferTax = maxHomePrice * 0.015;
                     const buyingClosingFees = maxHomePrice * 0.02;
                     const buyingAppraisalGap = maxHomePrice * (inputs.appraisalGap / 100);
                     const totalBuyingCosts = buyingTransferTax + buyingClosingFees + buyingAppraisalGap;
                     
-                    const cashNeeded = actualDownPayment + pointsCost + totalBuyingCosts;
+                    const cashNeeded = actualDownPayment + pointsCost + llpaFee + totalBuyingCosts;
                     const monthlyPI = calculateMonthlyPayment(loanAmount, adjustedRate);
                     const totalMonthly = monthlyPI + monthlyTaxInsurance;
                     
@@ -237,7 +284,9 @@
                         adjustedRate,
                         optimalPoints: points,
                         netEquityAfterSale,
-                        totalSellingCosts
+                        totalSellingCosts,
+                        llpaFee,
+                        ltv: actualLTV
                     };
                 }
             }
@@ -256,7 +305,8 @@
                 downPayment: parseFloat(document.getElementById('downPayment').value),
                 propertyTax: parseFloat(document.getElementById('propertyTax').value),
                 insurance: parseFloat(document.getElementById('insurance').value),
-                dtiRatio: parseFloat(document.getElementById('dtiRatio').value)
+                dtiRatio: parseFloat(document.getElementById('dtiRatio').value),
+                creditScore: parseFloat(document.getElementById('creditScore').value)
             };
         }
 
@@ -329,6 +379,8 @@
                     <td class="py-3 px-2 text-yellow-200">${s.optimalPoints}</td>
                     <td class="text-right py-3 px-2 font-bold">${formatCurrency(s.maxHomePrice)}</td>
                     <td class="text-right py-3 px-2">${formatCurrency(s.loanAmount)}</td>
+                    <td class="text-right py-3 px-2 text-orange-200">${s.ltv.toFixed(1)}%</td>
+                    <td class="text-right py-3 px-2 text-red-200">${formatCurrency(s.llpaFee)}</td>
                     <td class="text-right py-3 px-2">${formatCurrency(s.monthlyPI)}</td>
                     <td class="text-right py-3 px-2 font-semibold">${formatCurrency(s.totalMonthly)}</td>
                     <td class="text-right py-3 px-2">${formatCurrency(s.cashNeeded)}</td>
@@ -371,7 +423,8 @@
             document.getElementById('assumptions').innerHTML = `
                 <li>• Using <span class="font-semibold">${inputs.dtiRatio}%</span> back-end debt-to-income ratio</li>
                 <li>• <span class="font-semibold">Selling costs:</span> Transfer tax (1.5%) + Commission (${inputs.commission}%) + Fees (0.5%)</li>
-                <li>• <span class="font-semibold">Buying costs:</span> Transfer tax (1.5%) + Closing fees (2%) + Appraisal gap reserve (${inputs.appraisalGap}%)</li>
+                <li>• <span class="font-semibold">Buying costs:</span> Transfer tax (1.5%) + Closing fees (2%) + Appraisal gap reserve (${inputs.appraisalGap}%) + LLPA fees</li>
+                <li>• <span class="font-semibold">LLPA fees:</span> Fannie Mae Loan Level Pricing Adjustments based on ${inputs.creditScore} credit score and LTV</li>
                 <li>• <span class="font-semibold">Points:</span> Automatically optimized (0-3 points in 0.5 increments) to maximize home price</li>
                 <li>• Each point costs 1% of loan amount and reduces rate by ~0.25%</li>
                 <li>• 30-year fixed-rate mortgage with ${inputs.downPayment}% down payment</li>
@@ -380,7 +433,7 @@
 
         // Add event listeners
         ['income', 'currentHomeValue', 'equity', 'savings', 'commission', 'appraisalGap', 
-         'downPayment', 'propertyTax', 'insurance', 'dtiRatio'].forEach(id => {
+         'downPayment', 'creditScore', 'propertyTax', 'insurance', 'dtiRatio'].forEach(id => {
             document.getElementById(id).addEventListener('input', updateCalculations);
         });
 
