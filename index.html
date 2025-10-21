@@ -339,8 +339,8 @@
             document.getElementById('tableFooter').textContent = 
                 `All scenarios calculated to use exactly ${inputs.dtiRatio}% of your $${(inputs.income/1000).toFixed(0)}k income (${formatCurrency(inputs.income/12 * inputs.dtiRatio/100)}/month max) • Points are automatically optimized (0-3 points) to maximize home price at each rate`;
 
-            // Update school districts
-            const middleScenario = scenarios[2];
+            // Update school districts and cost breakdown for 6.25% scenario
+            const middleScenario = scenarios[2]; // 6.25% rate scenario
             document.getElementById('schoolDistricts').innerHTML = schoolDistricts.map(district => {
                 const canAfford = middleScenario.maxHomePrice >= district.medianPrice;
                 const priceRatio = (district.medianPrice / middleScenario.maxHomePrice) * 100;
@@ -367,9 +367,6 @@
                     </div>
                 `;
             }).join('');
-
-            // Update cost breakdown for 6.25% scenario
-            const middleScenario = scenarios[2]; // 6.25% rate scenario
             const sellingCosts = {
                 transferTax: inputs.currentHomeValue * 0.015,
                 commission: inputs.currentHomeValue * (inputs.commission / 100),
