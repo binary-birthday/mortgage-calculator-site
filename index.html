@@ -143,10 +143,10 @@
                 <div id="schoolDistricts" class="grid md:grid-cols-2 gap-4"></div>
             </div>
 
-            <!-- Assumptions -->
+            <!-- Cost Breakdown -->
             <div class="text-sm text-gray-600 bg-blue-50 rounded-lg p-4">
-                <p class="font-semibold text-gray-800 mb-2">💡 Key Assumptions:</p>
-                <ul class="space-y-1 ml-4" id="assumptions"></ul>
+                <p class="font-semibold text-gray-800 mb-2">💡 Detailed Cost Breakdown (6.25% Rate Scenario):</p>
+                <div id="assumptions"></div>
             </div>
         </div>
     </div>
@@ -419,15 +419,51 @@
                 `;
             }).join('');
 
-            // Update assumptions
+            // Update cost breakdown for 6.25% scenario
+            const middleScenario = scenarios[2]; // 6.25% rate scenario
+            const sellingCosts = {
+                transferTax: inputs.currentHomeValue * 0.015,
+                commission: inputs.currentHomeValue * (inputs.commission / 100),
+                fees: inputs.currentHomeValue * 0.005
+            };
+            const buyingCosts = {
+                transferTax: middleScenario.maxHomePrice * 0.015,
+                closingFees: middleScenario.maxHomePrice * 0.02,
+                appraisalGap: middleScenario.maxHomePrice * (inputs.appraisalGap / 100),
+                downPayment: middleScenario.maxHomePrice * (inputs.downPayment / 100),
+                pointsCost: middleScenario.loanAmount * (middleScenario.optimalPoints / 100),
+                llpaFee: middleScenario.llpaFee
+            };
+            
             document.getElementById('assumptions').innerHTML = `
-                <li>• Using <span class="font-semibold">${inputs.dtiRatio}%</span> back-end debt-to-income ratio</li>
-                <li>• <span class="font-semibold">Selling costs:</span> Transfer tax (1.5%) + Commission (${inputs.commission}%) + Fees (0.5%)</li>
-                <li>• <span class="font-semibold">Buying costs:</span> Transfer tax (1.5%) + Closing fees (2%) + Appraisal gap reserve (${inputs.appraisalGap}%) + LLPA fees</li>
-                <li>• <span class="font-semibold">LLPA fees:</span> Fannie Mae Loan Level Pricing Adjustments based on ${inputs.creditScore} credit score and LTV</li>
-                <li>• <span class="font-semibold">Points:</span> Automatically optimized (0-3 points in 0.5 increments) to maximize home price</li>
-                <li>• Each point costs 1% of loan amount and reduces rate by ~0.25%</li>
-                <li>• 30-year fixed-rate mortgage with ${inputs.downPayment}% down payment</li>
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-2">💰 Current Home Sale (Net Cash)</h4>
+                        <div class="text-xs space-y-1">
+                            <div class="flex justify-between"><span>Current equity:</span><span class="font-semibold text-green-600">+${formatCurrency(inputs.equity)}</span></div>
+                            <div class="flex justify-between"><span>Transfer tax (1.5%):</span><span class="text-red-600">-${formatCurrency(sellingCosts.transferTax)}</span></div>
+                            <div class="flex justify-between"><span>Commission (${inputs.commission}%):</span><span class="text-red-600">-${formatCurrency(sellingCosts.commission)}</span></div>
+                            <div class="flex justify-between"><span>Other fees (0.5%):</span><span class="text-red-600">-${formatCurrency(sellingCosts.fees)}</span></div>
+                            <div class="flex justify-between border-t pt-1"><span class="font-semibold">Net from sale:</span><span class="font-bold text-green-600">+${formatCurrency(middleScenario.netEquityAfterSale)}</span></div>
+                            <div class="flex justify-between"><span>Cash savings:</span><span class="font-semibold text-green-600">+${formatCurrency(inputs.savings)}</span></div>
+                            <div class="flex justify-between border-t pt-1 font-bold"><span>Total available:</span><span class="text-indigo-600">${formatCurrency(middleScenario.netEquityAfterSale + inputs.savings)}</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-gray-800 mb-2">🏠 New Home Purchase (6.25% Rate)</h4>
+                        <div class="text-xs space-y-1">
+                            <div class="flex justify-between"><span>Home price:</span><span class="font-bold text-indigo-600">${formatCurrency(middleScenario.maxHomePrice)}</span></div>
+                            <div class="flex justify-between"><span>Down payment (${inputs.downPayment}%):</span><span class="text-red-600">-${formatCurrency(buyingCosts.downPayment)}</span></div>
+                            <div class="flex justify-between"><span>Transfer tax (1.5%):</span><span class="text-red-600">-${formatCurrency(buyingCosts.transferTax)}</span></div>
+                            <div class="flex justify-between"><span>Closing fees (2%):</span><span class="text-red-600">-${formatCurrency(buyingCosts.closingFees)}</span></div>
+                            <div class="flex justify-between"><span>Appraisal gap (${inputs.appraisalGap}%):</span><span class="text-red-600">-${formatCurrency(buyingCosts.appraisalGap)}</span></div>
+                            <div class="flex justify-between"><span>Points (${middleScenario.optimalPoints}):</span><span class="text-red-600">-${formatCurrency(buyingCosts.pointsCost)}</span></div>
+                            <div class="flex justify-between"><span>LLPA fee (${middleScenario.ltv.toFixed(1)}% LTV, ${inputs.creditScore} score):</span><span class="text-red-600">-${formatCurrency(buyingCosts.llpaFee)}</span></div>
+                            <div class="flex justify-between border-t pt-1 font-bold"><span>Total cash needed:</span><span class="text-red-600">${formatCurrency(middleScenario.cashNeeded)}</span></div>
+                            <div class="flex justify-between"><span class="font-semibold text-gray-600">Monthly payment:</span><span class="font-bold text-indigo-600">${formatCurrency(middleScenario.totalMonthly)}</span></div>
+                        </div>
+                    </div>
+                </div>
             `;
         }
 
